@@ -13,7 +13,11 @@ pygame.init()
 
 grav = 1  # gravity
 t = 0.04  # time scale
+fuel = 1000
 width, height = 1800, 1000  # screen dimensions
+noise = 10
+enemy_base = [0 + noise, 1 / 4 * width - noise]
+ally_base = [3/4*width + noise, width - noise]
 generation = 0
 max_gen = 10000
 
@@ -31,12 +35,14 @@ class Missile:
         self.acceleration_y = 0
 
         self.launch = False
+        self.turned = 0
         self.destroyed = False
         self.success = False
+        self.max_round = 0
+
         self.fuel = f
         self.fuel_0 = f
         self.fitness = 0
-        self.total_fitness = 0
 
     def reset(self, x, y, v_x, v_y, acc, f):
         self.x = x
@@ -50,16 +56,16 @@ class Missile:
         self.acceleration_y = 0
 
         self.launch = False
+        self.turned = 0
         self.destroyed = False
         self.success = False
         self.fuel = f
         self.fuel_0 = f
-        self.total_fitness += self.fitness
-        self.fitness = 0
 
     def turn_missile(self, direction):
         self.acceleration_ang += math.pi * direction / 64
         self.acceleration_ang %= 2 * math.pi
+        self.turned += 1
 
     def move_missile(self):
         if self.launch is False or self.destroyed is True:
@@ -85,14 +91,14 @@ class Missile:
 
 
 def get_distance(m1, m2):
-    # return math.sqrt((m1.x - m2.x) ** 2 + (m1.y - m2.y) ** 2)
-    return abs(m1.x - m2.x) + abs(m1.y - m2.y)
+    return math.sqrt((m1.x - m2.x) ** 2 + (m1.y - m2.y) ** 2)
+    # return abs(m1.x - m2.x) + abs(m1.y - m2.y)
 
 
 def render(disp_win, enemy_missiles, friend_missiles):
     disp_win.fill(pygame.Color(0, 0, 0))
-    pygame.draw.line(disp_win, pygame.Color(255, 64, 0), (0, height), (width / 3, height), 20)
-    pygame.draw.line(disp_win, pygame.Color(0, 128, 255), (width * 2 / 3, height), (width, height), 20)
+    pygame.draw.line(disp_win, pygame.Color(255, 64, 0), (enemy_base[0], height), (enemy_base[1], height), 20)
+    pygame.draw.line(disp_win, pygame.Color(0, 128, 255), (ally_base[0], height), (ally_base[1], height), 20)
 
     for e_mis, f_mis in zip(enemy_missiles, friend_missiles):
         if e_mis.destroyed is False:
@@ -120,17 +126,60 @@ def render(disp_win, enemy_missiles, friend_missiles):
     pygame.display.update()
 
 
-def fitness_func(f_missile, distance):
+def fitness_func(f_missile, distance, stage):
     if f_missile.destroyed is True or (height - f_missile.y) < 50 or f_missile.destroyed is True:
         return f_missile.fitness
 
-    curr_fit = 5 * (2 ** (-distance / 128) + 2 ** (-distance / 32) + 2 ** (-distance / 8))
-    # curr_fit = 10 * 1 / (distance + 1)
+    curr_fit = 750 / (distance + 75) - 0.5
 
-    if f_missile.fitness <= curr_fit:
-        f_missile.fitness = curr_fit
+    if f_missile.fitness < curr_fit + stage * 10:
+        f_missile.fitness = curr_fit + stage * 10
 
     return f_missile.fitness
+
+
+def set_stage(e_missile, f_missile, stage):
+    if stage <= 10:
+        if stage % 2 == 1:
+            x_e = (enemy_base[0] + enemy_base[1]) / 2
+            x_t = (ally_base[0] + ally_base[1]) / 2 + (ally_base[0] - ally_base[1]) * stage / 20
+            x_f = (ally_base[0] + ally_base[1]) / 2
+        else:
+            x_e = (enemy_base[0] + enemy_base[1]) / 2
+            x_t = (ally_base[0] + ally_base[1]) / 2 - (ally_base[0] - ally_base[1]) * stage / 20
+            x_f = (ally_base[0] + ally_base[1]) / 2
+    elif stage <= 20:
+        if stage % 2 == 1:
+            x_e = (enemy_base[0] + enemy_base[1]) / 2 + (enemy_base[0] - enemy_base[1]) * (stage - 10) / 20
+            x_t = random.uniform(ally_base[0], ally_base[1])
+            x_f = (ally_base[0] + ally_base[1]) / 2
+        else:
+            x_e = (enemy_base[0] + enemy_base[1]) / 2 - (enemy_base[0] - enemy_base[1]) * (stage - 10) / 20
+            x_t = random.uniform(ally_base[0], ally_base[1])
+            x_f = (ally_base[0] + ally_base[1]) / 2
+    elif stage <= 30:
+        if stage % 2 == 1:
+            x_e = random.uniform(enemy_base[0], enemy_base[1])
+            x_t = random.uniform(ally_base[0], ally_base[1])
+            x_f = (ally_base[0] + ally_base[1]) / 2 + (ally_base[0] - ally_base[1]) * (stage - 20) / 20
+        else:
+            x_e = random.uniform(enemy_base[0], enemy_base[1])
+            x_t = random.uniform(ally_base[0], ally_base[1])
+            x_f = (ally_base[0] + ally_base[1]) / 2 - (ally_base[0] - ally_base[1]) * (stage - 20) / 20
+
+    else:
+        x_e = random.uniform(enemy_base[0], enemy_base[1])
+        x_t = random.uniform(ally_base[0], ally_base[1])
+
+        x_f = random.uniform(ally_base[0], ally_base[1])
+
+    x_range = x_t - x_e
+    v_0 = math.sqrt(width * grav) * 1.1
+    launch_angle = math.pi / 2 - 0.5 * math.asin(x_range * grav / v_0 ** 2)
+    e_missile.reset(x_e, height - 11, v_0 * math.cos(launch_angle), -v_0 * math.sin(launch_angle), 0, 1)
+
+    f_missile.reset(x_f, height - 11, 0, -1, 1.1 * grav, fuel)
+    f_missile.fitness = 10 * stage
 
 
 def game(genomes, config):
@@ -139,7 +188,7 @@ def game(genomes, config):
     ge = []
     enemy_missile_list = []
     friend_missile_list = []
-    time_steps = 0
+    max_stage_missile_list = []
     reset_num = 0
 
     global generation
@@ -151,8 +200,8 @@ def game(genomes, config):
         nets.append(net)
 
         # Create enemy missile
-        x = random.uniform(width * (1/6 - generation / max_gen / 6), width * (1/6 + generation / max_gen / 6))
-        x_enemy_target = random.uniform(width * (5/6 - generation / max_gen / 6), width * (5/6 + generation / max_gen / 6))
+        x = (enemy_base[0] + enemy_base[1]) / 2
+        x_enemy_target = (ally_base[0] + ally_base[1]) / 2
         x_range = x_enemy_target - x
         v_0 = math.sqrt(width * grav) * 1.1
         launch_angle = math.pi / 2 - 0.5 * math.asin(x_range * grav / v_0 ** 2)
@@ -160,75 +209,80 @@ def game(genomes, config):
                                           -v_0 * math.sin(launch_angle), 0, 1))
 
         # Create friendly AI missile
-        x = random.uniform(width * (1 - 2 * generation / max_gen / 6), width)
-        friend_missile_list.append(Missile(x, height - 11, 0, -1, 1.1 * grav, 1000))
+        x = (ally_base[0] + ally_base[1]) / 2
+        friend_missile_list.append(Missile(x, height - 11, 0, -1, 1.1 * grav, fuel))
+
+        # Track maximum stage reached
+        max_stage_missile_list.append(0)
 
         # Create genome for AI missile
         g.fitness = 0
         ge.append(g)
 
-    running = True
-    while running:
+    stage = 0
+    while max(max_stage_missile_list) == stage:
+        time_steps = 0
 
-        for x, (e_missile, f_missile) in enumerate(zip(enemy_missile_list, friend_missile_list)):
-            if time_steps == 1:
-                e_missile.launch = True
+        running = True
+        while running:
 
-            e_missile.move_missile()
-            f_missile.move_missile()
+            for x, (e_missile, f_missile) in enumerate(zip(enemy_missile_list, friend_missile_list)):
+                if time_steps == 1:
+                    e_missile.launch = True
 
-            distance = get_distance(e_missile, f_missile)
-            ge[x].fitness = fitness_func(f_missile, distance)
+                e_missile.move_missile()
+                f_missile.move_missile()
 
-            # neural network control
-            output = nets[x].activate((f_missile.x, f_missile.y, f_missile.velocity_x, f_missile.velocity_y,
-                                       e_missile.x, e_missile.y, e_missile.velocity_x, e_missile.velocity_y,
-                                       f_missile.fuel))
+                distance = get_distance(e_missile, f_missile)
+                ge[x].fitness = fitness_func(f_missile, distance, stage)
 
-            if f_missile.launch:
-                f_missile.turn_missile(output[0])
+                # neural network control
+                output = nets[x].activate((f_missile.x, f_missile.y, f_missile.velocity_x, f_missile.velocity_y,
+                                           e_missile.x - f_missile.x, e_missile.y - f_missile.y,
+                                           e_missile.velocity_x - f_missile.velocity_x,
+                                           e_missile.velocity_y - f_missile.velocity_y,
+                                           f_missile.fuel))
 
-            if output[1] > 0.5:
-                friend_missile_list[x].launch = True
+                if f_missile.launch:
+                    f_missile.turn_missile(output[0])
 
-            # collision detection
-            if e_missile.y > height - 10:
+                if output[1] > 0.5:
+                    friend_missile_list[x].launch = True
+
+                # collision detection
+                if e_missile.y > height - 10:
+                    e_missile.destroyed = True
+                if f_missile.y > height - 10 or f_missile.fuel == -100:
+                    f_missile.destroyed = True
+                if distance < (25 - stage / 5) and (height - f_missile.y) > 80 and f_missile.destroyed is False \
+                        and f_missile.turned > 12:
+                    e_missile.destroyed = True
+                    f_missile.destroyed = True
+                    f_missile.success = True
+                    max_stage_missile_list[x] += 1
+
+            if time_steps >= 2500:
+                break
+
+            if time_steps % 32 == 1:
+                render(display_window, enemy_missile_list, friend_missile_list)
+            time_steps += 1
+
+            for event in pygame.event.get():
+                if event.type == QUIT:
+                    pygame.quit()
+                    sys.exit()
+
+        stage += 1
+        for i, (e_missile, f_missile) in enumerate(zip(enemy_missile_list, friend_missile_list)):
+            if max_stage_missile_list[i] == stage:
+                set_stage(e_missile, f_missile, stage)
+
+            else:
+                e_missile.reset(0,0,0,0,0,0)
                 e_missile.destroyed = True
-            if f_missile.y > height - 10 or f_missile.fuel == -100:
+                f_missile.reset(0,0,0,0,0,0)
                 f_missile.destroyed = True
-            if distance < 5 and (height - e_missile.y) > 50 and f_missile.destroyed is False:
-                e_missile.destroyed = True
-                f_missile.destroyed = True
-                f_missile.success = True
-                f_missile.fitness += 10
-
-        # if time_steps >= 2500:
-        #     for e_missile, f_missile in zip(enemy_missile_list, friend_missile_list):
-        #         # Reset enemy missile
-        #         x = random.uniform(0, width / 3)
-        #         x_enemy_target = random.uniform(width * 2 / 3, width)
-        #         x_range = x_enemy_target - x
-        #         v_0 = math.sqrt(width * grav) * 1.1
-        #         launch_angle = math.pi / 2 - 0.5 * math.asin(x_range * grav / v_0 ** 2)
-        #         e_missile.reset(x, height - 11, v_0 * math.cos(launch_angle), -v_0 * math.sin(launch_angle), 0, 1)
-        #
-        #         # Reset friendly AI missile
-        #         f_missile.reset(5 / 6 * width, height - 11, 0, -1, 1.1 * grav, 1000)
-
-        if time_steps >= 2500:
-            break
-
-        if time_steps % 32 == 1:
-            render(display_window, enemy_missile_list, friend_missile_list)
-        time_steps += 1
-
-        # if reset_num > 12:
-        #     break
-
-        for event in pygame.event.get():
-            if event.type == QUIT:
-                pygame.quit()
-                sys.exit()
 
 
 def run(config_file):

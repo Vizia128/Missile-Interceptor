@@ -1,7 +1,7 @@
 
 [NEAT]
 fitness_criterion     = max
-fitness_threshold     = 100
+fitness_threshold     = 1000
 pop_size              = 250
 reset_on_extinction   = False
 
@@ -71,7 +71,7 @@ weight_replace_rate     = 0.1
 compatibility_threshold = 3.0
 
 [DefaultStagnation]
-species_fitness_func = min
+species_fitness_func = max
 max_stagnation       = 20
 species_elitism      = 2
 
