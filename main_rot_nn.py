@@ -14,6 +14,8 @@ pygame.init()
 grav = 1  # gravity
 t = 0.04  # time scale
 width, height = 1800, 1000  # screen dimensions
+generation = 0
+max_gen = 10000
 
 
 class Missile:
@@ -83,7 +85,8 @@ class Missile:
 
 
 def get_distance(m1, m2):
-    return math.sqrt((m1.x - m2.x) ** 2 + (m1.y - m2.y) ** 2)
+    # return math.sqrt((m1.x - m2.x) ** 2 + (m1.y - m2.y) ** 2)
+    return abs(m1.x - m2.x) + abs(m1.y - m2.y)
 
 
 def render(disp_win, enemy_missiles, friend_missiles):
@@ -118,18 +121,14 @@ def render(disp_win, enemy_missiles, friend_missiles):
 
 
 def fitness_func(f_missile, distance):
-    if f_missile.destroyed is True:
+    if f_missile.destroyed is True or (height - f_missile.y) < 50 or f_missile.destroyed is True:
         return f_missile.fitness
 
-    if (height - f_missile.y - 10) < 100 or -f_missile.velocity_y <= -2 or f_missile.destroyed is True:
-        curr_fit = 0
-    else:
-        curr_fit = 5 * (2 ** (-distance / 128) + 2 ** (-distance / 32) + 2 ** (-distance / 8))
+    curr_fit = 5 * (2 ** (-distance / 128) + 2 ** (-distance / 32) + 2 ** (-distance / 8))
+    # curr_fit = 10 * 1 / (distance + 1)
 
     if f_missile.fitness <= curr_fit:
         f_missile.fitness = curr_fit
-    else:
-        f_missile.destroyed = True
 
     return f_missile.fitness
 
@@ -143,14 +142,17 @@ def game(genomes, config):
     time_steps = 0
     reset_num = 0
 
+    global generation
+    generation += 1
+
     for _, g in genomes:
         # Create Neural Network
         net = neat.nn.FeedForwardNetwork.create(g, config)
         nets.append(net)
 
         # Create enemy missile
-        x = random.uniform(0, width / 3)
-        x_enemy_target = random.uniform(width * 2 / 3, width)
+        x = random.uniform(width * (1/6 - generation / max_gen / 6), width * (1/6 + generation / max_gen / 6))
+        x_enemy_target = random.uniform(width * (5/6 - generation / max_gen / 6), width * (5/6 + generation / max_gen / 6))
         x_range = x_enemy_target - x
         v_0 = math.sqrt(width * grav) * 1.1
         launch_angle = math.pi / 2 - 0.5 * math.asin(x_range * grav / v_0 ** 2)
@@ -158,7 +160,7 @@ def game(genomes, config):
                                           -v_0 * math.sin(launch_angle), 0, 1))
 
         # Create friendly AI missile
-        x = random.uniform(width * 2 / 3, width)
+        x = random.uniform(width * (1 - 2 * generation / max_gen / 6), width)
         friend_missile_list.append(Missile(x, height - 11, 0, -1, 1.1 * grav, 1000))
 
         # Create genome for AI missile
@@ -184,25 +186,21 @@ def game(genomes, config):
                                        f_missile.fuel))
 
             if f_missile.launch:
-                if (output[0] > 0) and (output[1] < 0):
-                    f_missile.turn_missile(1)
+                f_missile.turn_missile(output[0])
 
-                elif (output[0] < 0) and (output[1] > 0):
-                    f_missile.turn_missile(-1)
-
-            if output[2] > 0.5:
+            if output[1] > 0.5:
                 friend_missile_list[x].launch = True
 
             # collision detection
             if e_missile.y > height - 10:
                 e_missile.destroyed = True
-            if f_missile.y > height - 10:
+            if f_missile.y > height - 10 or f_missile.fuel == -100:
                 f_missile.destroyed = True
-            if distance < 5 and (height - e_missile.y) < 100 and f_missile.destroyed is False:
+            if distance < 5 and (height - e_missile.y) > 50 and f_missile.destroyed is False:
                 e_missile.destroyed = True
                 f_missile.destroyed = True
                 f_missile.success = True
-                f_missile.fitness += 5
+                f_missile.fitness += 10
 
         # if time_steps >= 2500:
         #     for e_missile, f_missile in zip(enemy_missile_list, friend_missile_list):
@@ -245,7 +243,7 @@ def run(config_file):
     neat.checkpoint.Checkpointer(generation_interval=10, time_interval_seconds=None, filename_prefix='neat_checkpoint')
 
     # Run for up to 1000 generations.
-    winner = p.run(game, 1000)
+    winner = p.run(game, max_gen)
     pickle.dump(winner, open("save.p", "wb"))
 
     # show final stats
