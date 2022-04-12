@@ -13,7 +13,7 @@ pygame.init()
 
 grav = 1  # gravity
 t = 0.04  # time scale
-fuel = 1000
+fuel = 1200
 width, height = 1800, 1000  # screen dimensions
 noise = 10
 enemy_base = [0 + noise, 1 / 4 * width - noise]
@@ -170,25 +170,19 @@ def fitness_func(e_missile, f_missile, distance, stage):
 
 
 def set_stage(e_missile, f_missile, stage):
-    gap = 12
+    gap = 4
 
     if stage < gap:
         x_f = (ally_base[0] + ally_base[1]) / 2
-        if stage % 2 == 1:
-            x_e = (ally_base[0] + ally_base[1]) / 2 + (ally_base[0] - ally_base[1]) * stage / gap
-        else:
-            x_e = (ally_base[0] + ally_base[1]) / 2 - (ally_base[0] - ally_base[1]) * stage / gap
-        e_missile.reset(x_e, height // 2 + 4 * stage, 0, 0, 0, 0, False)
+        x_e = random.uniform(ally_base[0], ally_base[1])
+        e_missile.reset(x_e, random.uniform(height // 4, 3 * height // 4), 0, 0, 0, 0, False)
         f_missile.reset(x_f, height - 11, 0, -1, 1.1 * grav, fuel, True)
         return
 
     if stage < gap * 2:
         x_f = (ally_base[0] + ally_base[1]) / 2
-        if stage % 2 == 1:
-            x_e = (ally_base[0] + ally_base[1]) / 2 + (ally_base[0] - ally_base[1]) * (stage - gap) / gap * 2
-        else:
-            x_e = (ally_base[0] + ally_base[1]) / 2 - (ally_base[0] - ally_base[1]) * (stage - gap) / gap * 2
-        e_missile.reset(x_e, 100, 0, 0, 0, 0, True)
+        x_e = random.uniform(ally_base[0], ally_base[1])
+        e_missile.reset(x_e, random.uniform(0, height // 4), 0, 0, 0, 0, True)
         f_missile.reset(x_f, height - 11, 0, -1, 1.1 * grav, fuel, True)
         return
 
@@ -217,6 +211,9 @@ def game(genomes, config):
 
     global generation
     generation += 1
+    x_f_0 = ally_base[generation % 2]
+
+    print(genomes[1])
 
     for _, g in genomes:
         # Create Neural Network
@@ -231,7 +228,7 @@ def game(genomes, config):
         # launch_angle = math.pi / 2 - 0.5 * math.asin(x_range * grav / v_0 ** 2)
         # enemy_missile_list.append(Missile(x, height - 11, v_0 * math.cos(launch_angle),
         #                                   -v_0 * math.sin(launch_angle), 0, 1, x_enemy_target))
-        enemy_missile_list.append(Missile((ally_base[0]+ally_base[1] + 50)//2, height // 2, 0, 0, 0, 0, False))
+        enemy_missile_list.append(Missile(x_f_0, 3 * height // 4, 0, 0, 0, 0, False))
 
         # Create friendly AI missile
         x = (ally_base[0]+ally_base[1])//2
@@ -263,11 +260,11 @@ def game(genomes, config):
                 ge[x].fitness = fitness_func(e_missile, f_missile, distance, stage)
 
                 # neural network control
-                output = nets[x].activate((f_missile.y, f_missile.velocity_x, f_missile.velocity_y,
+                output = nets[x].activate((f_missile.x, f_missile.y, f_missile.velocity_x, f_missile.velocity_y,
                                            e_missile.x - f_missile.x, e_missile.y - f_missile.y,
                                            e_missile.velocity_x - f_missile.velocity_x,
                                            e_missile.velocity_y - f_missile.velocity_y,
-                                           f_missile.acceleration_ang))
+                                           math.sin(f_missile.acceleration_ang), math.cos(f_missile.acceleration_ang)))
 
                 if f_missile.launch:
                     f_missile.turn_missile(output[0])
