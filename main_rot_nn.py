@@ -213,8 +213,6 @@ def game(genomes, config):
     generation += 1
     x_f_0 = ally_base[generation % 2]
 
-    print(genomes[1])
-
     for _, g in genomes:
         # Create Neural Network
         net = neat.nn.FeedForwardNetwork.create(g, config)
